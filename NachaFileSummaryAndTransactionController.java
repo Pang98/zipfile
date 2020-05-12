@@ -112,10 +112,6 @@ public class NachaFileSummaryAndTransactionController {
             } else {
                 model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", systemManager.getSystemSecurity().getApplValDt());
             }
-
-            if (requestParams.get("key") != null && !"".equals(requestParams.get("key"))) {
-                model.addAttribute("FilesToDownload", requestParams.get("key"));
-            }
            
             List<String> assignedSystem = userSystemManager.getAssignedSystemById(userSession.getUsrId());
 
@@ -129,12 +125,7 @@ public class NachaFileSummaryAndTransactionController {
             String menuId = requestParams.get("menuId");
             model.addAttribute("stoken", userSession.getsToken());
             List<FunctionButton> funcBtns = systemManager.getFuncBtn(userSession.getUsrId(), menuId);
-            
-//             funcBtns.forEach(btn -> {
-//                btn.setApproval(true);
-//                btn.setSubmitAction(false);
-//            });
-                         
+                 
             model.addAttribute("auditTRec", "[" + trxHeaders.size() + "]");
             cUtils.setBrowseModel(trxHeaders, funcBtns, cPath, menuId, model);
 
@@ -146,11 +137,10 @@ public class NachaFileSummaryAndTransactionController {
 
     @Audit("Transaction > Nacha File Summary And Transaction PDF Report > Download")
     @RequestMapping(value = "/{stpMsgId}/Download", method = RequestMethod.POST)
-    public String redirectScreen(@SessionAttribute("UserSession") UserSession userSession, HttpSession session, Model model, @RequestParam Map<String, String> requestParams, HttpServletResponse response) {
-
+    public String redirectScreen(@SessionAttribute("UserSession") UserSession userSession, @PathVariable String stpMsgId, HttpSession session, Model model, @RequestParam Map<String, String> requestParams, HttpServletResponse response) {
         try {
-            TransactionsNachaHeader advSearchTrxHeader = new TransactionsNachaHeader();
-
+            model.addAttribute("FilesToDownload", stpMsgId);
+            TransactionsNachaHeader advSearchTrxHeader = new TransactionsNachaHeader();           
             advSearchTrxHeader = validateAdvSearch(requestParams);
             if (advSearchTrxHeader.getSettValDt() != null && advSearchTrxHeader.getSettValDt().isEmpty()) {
                 model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", advSearchTrxHeader.getAppValDt());
@@ -164,7 +154,7 @@ public class NachaFileSummaryAndTransactionController {
     }
 
     @RequestMapping(value = "/{stpMsgId}/TriggerDownload", method = RequestMethod.POST)
-    public void redirectDownloadZip(@SessionAttribute("UserSession") UserSession userSession, @PathVariable String stpMsgId, HttpSession session, Model model, @RequestParam Map<String, String> requestParams, HttpServletResponse response) {
+    public void downloadZipFile(@SessionAttribute("UserSession") UserSession userSession, @PathVariable String stpMsgId, HttpSession session, Model model, @RequestParam Map<String, String> requestParams, HttpServletResponse response) {
 
         String downloadFileName = DateTime.getCurrentDateTime("yyyyMMdd_HHmmss").concat("_IBG_Report.zip");
         try {
@@ -191,7 +181,7 @@ public class NachaFileSummaryAndTransactionController {
         List<String> response = new ArrayList<>();
         if (stpMsgId.split("\\|").length > 30) {
             response.add("false");
-            response.add("Selected file count exceeded 30. Please select file not more than 30");
+            response.add("Selected file count exceeded 30. Please select file not more than 30");           
         } else {
             response.add("true");
         }
@@ -609,4 +599,3 @@ public class NachaFileSummaryAndTransactionController {
     }
 
 }
-
