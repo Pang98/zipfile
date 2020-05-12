@@ -1,0 +1,127 @@
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+package com.spring.transaction.dao;
+
+import com.spring.transaction.model.TransactionsNachaHeader;
+import java.sql.ResultSet;
+import java.util.ArrayList;
+import java.util.List;
+import javax.sql.DataSource;
+import my.com.finexus.db.CommDb;
+import my.com.finexus.util.DateTime;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Repository;
+
+/**
+ *
+ * @author TomKT
+ */
+@Repository
+public class NachaFileSummaryAndTransactionDAOImpl implements NachaFileSummaryAndTransactionDAO {
+
+    protected final String TRANSACTIONS_NACHA_HEADER = "TRANSACTIONS_NACHA_HEADER";
+    protected final String TRANSACTIONS_NACHA_HEADER_ARCHIVE = "TRANSACTIONS_NACHA_HEADER_ARCHIVE";
+    protected final String TRANSACTIONS_NACHA_DETAILS = "TRANSACTIONS_NACHA_DETAILS";
+    protected final String TRANSACTIONS_NACHA_DETAILS_ARCHIVE = "TRANSACTIONS_NACHA_DETAILS_ARCHIVE";
+
+
+    protected CommDb commDb = new CommDb();
+
+    @Autowired
+    protected DataSource dataSource = null;
+//    protected ResultSet rs = null;
+    protected int intRs = 0;
+    protected int intRsHeader = 0;
+    protected int intRsDetail = 0;
+//    protected String sql = "";
+
+    @Override
+    public List<TransactionsNachaHeader> getNachaFileSummaryAndTransaction(TransactionsNachaHeader advSearchTrxHeader, List<String> assignedSystem) throws Exception {
+        List<TransactionsNachaHeader> trxList = new ArrayList<TransactionsNachaHeader>();
+        List<String> fields = new ArrayList<>();
+        List<String> whereFields = new ArrayList<>();
+        List<String> orderByFields = new ArrayList<>();
+        List<Object> params = new ArrayList<>();
+        List<String> sqlList = new ArrayList<>();
+        List<Object> params2 = new ArrayList<Object>();
+        
+        fields.add("DISTINCT TH.\"STP_MSG_ID\"");
+        fields.add("\"NACHA_STP_MSG_ID\" = CASE WHEN TH.STP_MSG_ID LIKE 'O%' THEN TH.STP_MSG_ID ELSE '' END");
+        fields.add("TH.\"VAL_DT\"");
+        fields.add("TH.\"VAL_TM\"");
+        fields.add("TH.\"FILE_NM\"");
+        fields.add("TH.\"STATUS\"");
+
+        boolean isArchive = false;
+        boolean isArchivalDb = false;
+
+        if (advSearchTrxHeader.getSettValDt() != null && !advSearchTrxHeader.getSettValDt().isEmpty()) {
+            whereFields.add("\"VAL_DT\" = ?");
+
+            params.add(advSearchTrxHeader.getSettValDt());
+            isArchive = Integer.parseInt(advSearchTrxHeader.getSettValDt()) < Integer.parseInt(advSearchTrxHeader.getAppValDt());
+            isArchivalDb = DateTime.calculateDiffMonth(advSearchTrxHeader.getSettValDt(), advSearchTrxHeader.getAppValDt()) > getHousekeepMonth();
+        } else {
+            whereFields.add("\"VAL_DT\" >= ?");
+            params.add(advSearchTrxHeader.getAppValDt());
+        }
+
+        String innerJoinTable = TRANSACTIONS_NACHA_HEADER + " TH INNER JOIN " + TRANSACTIONS_NACHA_DETAILS + " TD ON TH.\"STP_MSG_ID\" = TD.\"STP_MSG_ID\" LEFT OUTER JOIN ERROR_MESSAGE EM ON EM.ERR_MSG_CDE = TH.REASON_CDE ";
+       
+        whereFields.add(" AND TH.\"STATUS\" = 'COMPLETE' ");
+        
+        if (isArchive) {
+            String innerJoinTableArchive = innerJoinTable.replace(TRANSACTIONS_NACHA_HEADER, TRANSACTIONS_NACHA_HEADER_ARCHIVE);
+            sqlList.add(commDb.buildSelectQuery(innerJoinTable, fields, whereFields, null));
+            params2.addAll(params);
+
+            if (isArchivalDb) {
+                sqlList.add("UNION ALL " + commDb.buildSelectQuery(innerJoinTableArchive, fields, whereFields, null));
+                params2.addAll(params);
+                sqlList.add("UNION ALL " + commDb.buildSelectQuery(innerJoinTableArchive, fields, whereFields, orderByFields).replace(CommDb.IBGCLIENT, CommDb.IBGCLIENT_ARCHIVE));
+                params2.addAll(params);
+            } else {
+                sqlList.add("UNION ALL " + commDb.buildSelectQuery(innerJoinTableArchive, fields, whereFields, orderByFields));
+                params2.addAll(params);
+            }
+
+        } else {
+            sqlList.add(commDb.buildSelectQuery(innerJoinTable, fields, whereFields, orderByFields));
+            params2.addAll(params);
+        }
+
+        try (ResultSet rs = commDb.selectStatement(dataSource, sqlList, params2)) {
+            while (rs.next()) {
+                TransactionsNachaHeader trxNachaHeader = new TransactionsNachaHeader();
+                trxNachaHeader.setSumMsgId(rs.getString("NACHA_STP_MSG_ID"));
+                trxNachaHeader.setTrxMsgId(rs.getString("STP_MSG_ID"));
+                trxNachaHeader.setSettValDt(rs.getString("VAL_DT"));
+                trxNachaHeader.setValTm(rs.getString("VAL_TM"));                
+                trxNachaHeader.setFileNm(rs.getString("FILE_NM"));                
+                trxNachaHeader.setStatus(rs.getString("STATUS"));
+                trxList.add(trxNachaHeader);
+            }
+        }
+
+        return trxList;
+    }
+    
+    private int getHousekeepMonth() throws Exception {
+
+        int housekeepMonth = -1;
+        String sql = "SELECT \"HOUSEKEEP_MONTH\" FROM \"HOUSEKEEP_PERIOD\" ";
+
+        try (ResultSet rs = commDb.selectStatement(dataSource, sql)) {
+            while (rs.next()) {
+                housekeepMonth = rs.getInt("HOUSEKEEP_MONTH");
+            }
+        }
+
+        return housekeepMonth;
+    }
+
+
+}
