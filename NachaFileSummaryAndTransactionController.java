@@ -1,4 +1,4 @@
- /*
+/*
  * To change this license header, choose License Headers in Project Properties.
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
@@ -113,6 +113,10 @@ public class NachaFileSummaryAndTransactionController {
                 model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", systemManager.getSystemSecurity().getApplValDt());
             }
 
+            if (requestParams.get("key") != null && !"".equals(requestParams.get("key"))) {
+                model.addAttribute("FilesToDownload", requestParams.get("key"));
+            }
+           
             List<String> assignedSystem = userSystemManager.getAssignedSystemById(userSession.getUsrId());
 
             List<String>[] trxStatusGroup = transactionStatusManager.getTransactionStatusListByGroup();
@@ -120,11 +124,17 @@ public class NachaFileSummaryAndTransactionController {
 
             List<TransactionsNachaHeader> trxHeaders = nachaFileSummaryAndTransactionManager.getNachaFileSummaryAndTransaction(advSearchTrxHeader, assignedSystem);
             formatList(trxHeaders);
+
             String cPath = "transaction/NachaFileSummaryAndTransaction";
             String menuId = requestParams.get("menuId");
-
+            model.addAttribute("stoken", userSession.getsToken());
             List<FunctionButton> funcBtns = systemManager.getFuncBtn(userSession.getUsrId(), menuId);
-
+            
+//             funcBtns.forEach(btn -> {
+//                btn.setApproval(true);
+//                btn.setSubmitAction(false);
+//            });
+                         
             model.addAttribute("auditTRec", "[" + trxHeaders.size() + "]");
             cUtils.setBrowseModel(trxHeaders, funcBtns, cPath, menuId, model);
 
@@ -136,38 +146,48 @@ public class NachaFileSummaryAndTransactionController {
 
     @Audit("Transaction > Nacha File Summary And Transaction PDF Report > Download")
     @RequestMapping(value = "/{stpMsgId}/Download", method = RequestMethod.POST)
-    public String redirectDownloadZip(@SessionAttribute("UserSession") UserSession userSession, @PathVariable String stpMsgId, HttpSession session, Model model, @RequestParam Map<String, String> requestParams, HttpServletResponse response) {
+    public String redirectScreen(@SessionAttribute("UserSession") UserSession userSession, HttpSession session, Model model, @RequestParam Map<String, String> requestParams, HttpServletResponse response) {
+
+        try {
+            TransactionsNachaHeader advSearchTrxHeader = new TransactionsNachaHeader();
+
+            advSearchTrxHeader = validateAdvSearch(requestParams);
+            if (advSearchTrxHeader.getSettValDt() != null && advSearchTrxHeader.getSettValDt().isEmpty()) {
+                model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", advSearchTrxHeader.getAppValDt());
+            } else {
+                model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", advSearchTrxHeader.getSettValDt());
+            }
+        } catch (Exception ex) {
+            Log.exception("NachaFileSummaryAndTransactionController", ex);
+        }
+        return "forward:/transaction/NachaFileSummaryAndTransaction/Browse";
+    }
+
+    @RequestMapping(value = "/{stpMsgId}/TriggerDownload", method = RequestMethod.POST)
+    public void redirectDownloadZip(@SessionAttribute("UserSession") UserSession userSession, @PathVariable String stpMsgId, HttpSession session, Model model, @RequestParam Map<String, String> requestParams, HttpServletResponse response) {
 
         String downloadFileName = DateTime.getCurrentDateTime("yyyyMMdd_HHmmss").concat("_IBG_Report.zip");
         try {
-            byte[] generatedZipFiles = zipFiles(stpMsgId, userSession, response);
+            byte[] generatedZipFiles = zipFiles(stpMsgId, userSession);
 
             if (generatedZipFiles.length > 0) {
                 response.setContentType("application/zip");
                 response.setHeader("Content-Disposition", "attachment; filename=\"" + downloadFileName + "\"");
 
                 ServletOutputStream sos = response.getOutputStream();
-
                 sos.write(generatedZipFiles);
                 sos.flush();
-                sos.close();
-                response.getOutputStream().flush();
-                response.getOutputStream().close();
             }
         } catch (IOException e) {
             Log.exception("NachaFileSummaryAndTransactionController", e);
         } catch (Exception ex) {
             Log.exception("NachaFileSummaryAndTransactionController", ex);
         }
-        
-        return "forward:/transaction/NachaFileSummaryAndTransaction/Browse";
-        
-        //redirectNachaFileSummaryAndTransactionBrowse(userSession, session, model, requestParams, null);
     }
 
     @RequestMapping(value = "/{stpMsgId}/{task}/Validate", method = RequestMethod.POST)
     public @ResponseBody
-    List<String> validateIBGReportDownloadTask(@SessionAttribute("UserSession") UserSession userSession, @PathVariable String stpMsgId, @PathVariable String task, @RequestBody(required = false) String requestBody) {
+    List<String> validateIBGReportDownloadTask(@SessionAttribute("UserSession") UserSession userSession, @PathVariable String stpMsgId, @PathVariable String task) {
         List<String> response = new ArrayList<>();
         if (stpMsgId.split("\\|").length > 30) {
             response.add("false");
@@ -320,7 +340,6 @@ public class NachaFileSummaryAndTransactionController {
 
     private void TransactionMessageView(UserSession userSession, Model model, String msgId, String fileType, HttpServletResponse response) {
         String messageType = "Transaction";
-
         try {
             Map<String, Object> params = new HashMap<String, Object>();
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -390,6 +409,7 @@ public class NachaFileSummaryAndTransactionController {
                 response.setHeader("Content-Disposition", "attachment; filename=" + msgId + "_" + printedTime.replaceAll(":", "").replaceAll(" ", "_") + ".pdf");
                 response.setContentType("application/pdf");
                 exporterPDF.exportReport();
+
             }
 
             model.addAttribute("sToken", userSession.getsToken());
@@ -399,7 +419,7 @@ public class NachaFileSummaryAndTransactionController {
         }
     }
 
-    public byte[] zipFiles(String stpMsgId, UserSession userSession, HttpServletResponse response) throws Exception {
+    public byte[] zipFiles(String stpMsgId, UserSession userSession) throws Exception {
 
         byte[] buffer = new byte[1024];
         Map<String, Object> params = new HashMap<String, Object>();
@@ -455,10 +475,8 @@ public class NachaFileSummaryAndTransactionController {
                 JRAbstractExporter exporterPDFTrx = new JRPdfExporter();
                 exporterPDFTrx.setParameter(JRExporterParameter.JASPER_PRINT, jasperPrintTrxMsg);
                 exporterPDFTrx.setParameter(JRExporterParameter.OUTPUT_STREAM, pdfBaos);
-                response.setHeader("Content-Disposition", "attachment; filename=" + stpMsgIdList.get(j) + "_" + printedTime.replaceAll(":", "").replaceAll(" ", "_") + ".pdf");
-                response.setContentType("application/pdf");
                 exporterPDFTrx.exportReport();
-                
+
                 fis = new ByteArrayInputStream(pdfBaos.toByteArray()); //baos from jasperreport               
                 String Trxentryname = stpMsgIdList.get(j) + "_Transaction_Message_" + printedTime.replaceAll(":", "").replaceAll(" ", "_") + ".pdf";
 
@@ -487,15 +505,13 @@ public class NachaFileSummaryAndTransactionController {
                     JRAbstractExporter exporterPDFSummary = new JRPdfExporter();
                     exporterPDFSummary.setParameter(JRExporterParameter.JASPER_PRINT, jasperPrintSummaryMsg);
                     exporterPDFSummary.setParameter(JRExporterParameter.OUTPUT_STREAM, pdfBaos);
-                    response.setHeader("Content-Disposition", "attachment; filename=" + stpMsgIdList.get(j) + "_" + printedTime.replaceAll(":", "").replaceAll(" ", "_") + ".pdf");
-                    response.setContentType("application/pdf");
                     exporterPDFSummary.exportReport();
 
-                    fis = new ByteArrayInputStream(pdfBaos.toByteArray()); //baos from jasperreport               
+                    fis = new ByteArrayInputStream(pdfBaos.toByteArray());
                     String SummaryEntryname = stpMsgIdList.get(j) + "_Summary_Message_" + printedTime.replaceAll(":", "").replaceAll(" ", "_") + ".pdf";
 
                     zos.putNextEntry(new ZipEntry(SummaryEntryname));
-                    
+
                     while ((length = fis.read(buffer)) > 0) {
                         zos.write(buffer, 0, length);
                     }
@@ -593,3 +609,4 @@ public class NachaFileSummaryAndTransactionController {
     }
 
 }
+
