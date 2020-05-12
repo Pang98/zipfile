@@ -87,6 +87,7 @@ public class NachaFileSummaryAndTransactionController {
 
     private String errorMsg = "";
     private String gfJrxmlPath = "/../applications/IBG/WEB-INF/jrxml/";
+    private boolean advancedSearch = false;
 
     Validator validator = new Validator();
     ErrorMessageController errorMessage = new ErrorMessageController();
@@ -105,13 +106,13 @@ public class NachaFileSummaryAndTransactionController {
                 System.out.println("Browse (AppValDt) " + advSearchTrxHeader.getAppValDt());
                 
                 if (advSearchTrxHeader.getSettValDt() != null && !advSearchTrxHeader.getSettValDt().isEmpty()) {
-                    model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", "");
+                    model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", advSearchTrxHeader.getSettValDt());
                     
                 } else {
-                    model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", advSearchTrxHeader.getSettValDt());
+                    model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", advSearchTrxHeader.getAppValDt());                
                 }
             } else {
-                model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", "");
+                model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", systemManager.getSystemSecurity().getApplValDt());
             }
            
             List<String> assignedSystem = userSystemManager.getAssignedSystemById(userSession.getUsrId());
@@ -141,17 +142,13 @@ public class NachaFileSummaryAndTransactionController {
     public String redirectScreen(@SessionAttribute("UserSession") UserSession userSession, @PathVariable String stpMsgId, HttpSession session, Model model, @RequestParam Map<String, String> requestParams, HttpServletResponse response) {
         try {
             model.addAttribute("FilesToDownload", stpMsgId);
-            
             TransactionsNachaHeader advSearchTrxHeader = new TransactionsNachaHeader();           
-            advSearchTrxHeader = validateAdvSearch(requestParams); 
+            advSearchTrxHeader = validateAdvSearch(requestParams);
+            advSearchTrxHeader.setSettValDt("");
             System.out.println("Download (SettValDt) " + advSearchTrxHeader.getSettValDt());
             System.out.println("Download (AppValDt) " + advSearchTrxHeader.getAppValDt());
-            if (advSearchTrxHeader.getSettValDt() != null && !advSearchTrxHeader.getSettValDt().isEmpty()) {
-                model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", "");
-            } else {
-                model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", advSearchTrxHeader.getSettValDt());
-                
-            }
+            model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", ""); 
+            
         } catch (Exception ex) {
             Log.exception("NachaFileSummaryAndTransactionController", ex);
         }
