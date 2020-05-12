@@ -40,8 +40,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipOutputStream;
@@ -56,7 +54,6 @@ import net.sf.jasperreports.engine.export.JRHtmlExporterParameter;
 import net.sf.jasperreports.engine.export.JRPdfExporter;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseBody;
 import webservice.core.nachaview.NACHAFILE;
 import webservice.core.nachaview.NACHAFILERecord;
@@ -100,17 +97,21 @@ public class NachaFileSummaryAndTransactionController {
     public String redirectNachaFileSummaryAndTransactionBrowse(@SessionAttribute("UserSession") UserSession userSession, HttpSession session, Model model, @RequestParam Map<String, String> requestParams, HttpServletRequest request) {
         try {
             boolean forward = (request.getAttribute("forward") != null && request.getAttribute("forward").equals("true")) || (requestParams.get("cancel") != null && requestParams.get("cancel").equals("true"));
-
+            System.out.println(forward);
             TransactionsNachaHeader advSearchTrxHeader = new TransactionsNachaHeader();
             if (!forward) {
                 advSearchTrxHeader = validateAdvSearch(requestParams);
-                if (advSearchTrxHeader.getSettValDt() != null && advSearchTrxHeader.getSettValDt().isEmpty()) {
-                    model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", advSearchTrxHeader.getAppValDt());
+                System.out.println("Browse (SettValDt) " + advSearchTrxHeader.getSettValDt());
+                System.out.println("Browse (AppValDt) " + advSearchTrxHeader.getAppValDt());
+                
+                if (advSearchTrxHeader.getSettValDt() != null && !advSearchTrxHeader.getSettValDt().isEmpty()) {
+                    model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", "");
+                    
                 } else {
                     model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", advSearchTrxHeader.getSettValDt());
                 }
             } else {
-                model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", systemManager.getSystemSecurity().getApplValDt());
+                model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", "");
             }
            
             List<String> assignedSystem = userSystemManager.getAssignedSystemById(userSession.getUsrId());
@@ -140,12 +141,16 @@ public class NachaFileSummaryAndTransactionController {
     public String redirectScreen(@SessionAttribute("UserSession") UserSession userSession, @PathVariable String stpMsgId, HttpSession session, Model model, @RequestParam Map<String, String> requestParams, HttpServletResponse response) {
         try {
             model.addAttribute("FilesToDownload", stpMsgId);
+            
             TransactionsNachaHeader advSearchTrxHeader = new TransactionsNachaHeader();           
-            advSearchTrxHeader = validateAdvSearch(requestParams);
-            if (advSearchTrxHeader.getSettValDt() != null && advSearchTrxHeader.getSettValDt().isEmpty()) {
-                model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", advSearchTrxHeader.getAppValDt());
+            advSearchTrxHeader = validateAdvSearch(requestParams); 
+            System.out.println("Download (SettValDt) " + advSearchTrxHeader.getSettValDt());
+            System.out.println("Download (AppValDt) " + advSearchTrxHeader.getAppValDt());
+            if (advSearchTrxHeader.getSettValDt() != null && !advSearchTrxHeader.getSettValDt().isEmpty()) {
+                model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", "");
             } else {
                 model.addAttribute("Transaction_Nacha_File_Summary_And_Transaction_Value_Date", advSearchTrxHeader.getSettValDt());
+                
             }
         } catch (Exception ex) {
             Log.exception("NachaFileSummaryAndTransactionController", ex);
@@ -599,3 +604,4 @@ public class NachaFileSummaryAndTransactionController {
     }
 
 }
+
